@@ -1,0 +1,27 @@
+{
+  "name": "storm-volume",
+  "private": true,
+  "version": "0.1.0",
+  "description": "3D visualizer for Oklahoma terrain and severe-weather data (NEXRAD radar, SPC tornado tracks).",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "data:tracks": "node scripts/fetch-spc-tracks.mjs",
+    "data:nexrad": "node scripts/fetch-nexrad.mjs",
+    "data:bake": "node scripts/bake-radar.mjs",
+    "data": "npm run data:tracks && npm run data:nexrad && npm run data:bake"
+  },
+  "dependencies": {
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/three": "^0.169.0",
+    "nexrad-level-2-data": "^2.4.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

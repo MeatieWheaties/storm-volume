@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Storm Volume</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+    <aside id="hud">
+      <h1>Storm Volume</h1>
+      <p class="event" id="event-label"></p>
+      <label>
+        Terrain exaggeration <span id="exag-value"></span>
+        <input id="exag" type="range" min="1" max="20" step="0.5" />
+      </label>
+      <label class="check"><input id="show-tracks" type="checkbox" checked /> Tornado tracks</label>
+      <label class="check"><input id="show-radar" type="checkbox" checked /> Radar coverage</label>
+      <dl id="stats"></dl>
+      <p class="credits">
+        Terrain: AWS Terrain Tiles · Tracks: NOAA SPC · Radar: NOAA NEXRAD via Unidata
+      </p>
+    </aside>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

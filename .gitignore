@@ -1,0 +1,6 @@
+node_modules/
+dist/
+# Raw downloads from the data pipeline (large); baked outputs live in public/data/
+data/raw/
+*.log
+.DS_Store
