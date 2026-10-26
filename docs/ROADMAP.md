@@ -6,11 +6,14 @@
 - [x] SPC tornado tracks draped on terrain, coloured and sized by (E)F rating
 - [x] NEXRAD Level II fetch + bake pipeline → Cartesian reflectivity grids (`public/data/radar/`)
 
-## Next: render the radar volume
-- [ ] Load `radar/index.json` and upload frames into a `THREE.Data3DTexture` (R8)
-- [ ] Isosurfaces at 35 / 50 / 60 dBZ via marching cubes (CPU first, then WebGPU compute)
-- [ ] Raymarched volume view as an alternative to the isosurfaces (reflectivity colour table, adjustable opacity)
-- [ ] Time slider + playback across frames (~4.5 min apart); interpolate between frames in the shader
+## Radar volume
+- [x] Frames uploaded as R8 `Data3DTexture`s (gzipped on disk, inflated with `DecompressionStream`)
+- [x] Raymarched volume: NWS colour table, opacity-corrected compositing, early ray termination
+- [x] Rays clipped by a terrain depth pre-pass (log depth decoded in the shader)
+- [x] Time slider + playback; neighbouring scans blended in the shader
+- [ ] Gradient-based lighting / self-shadowing for more readable structure
+- [ ] Isosurfaces at 35 / 50 / 60 dBZ via marching cubes (WebGPU compute) as a second view
+- [ ] Advection-corrected interpolation between frames (crossfading ghosts fast-moving cores)
 - [ ] Highlight the active tornado segment on its track for the current frame time
 
 ## Atmosphere
@@ -25,5 +28,6 @@
 - [ ] Data-quality panel: tilt count, gaps, truncated volumes per frame
 
 ## Known limitations
+- Far from the radar (>~100 km) the gaps between tilts exceed the fill limit, so distant storms show vertical striping.
 - Cone of silence: above the highest tilt (19.5°) close to the radar there's no data, so storm tops near KTLX are clipped.
 - The radar grid uses a flat east/north frame around KTLX. Over ±120 km the difference from the scene's Mercator frame is under 1%.

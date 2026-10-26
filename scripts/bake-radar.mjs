@@ -5,7 +5,7 @@
 //
 // Output (public/data/radar/):
 //   index.json          grid metadata + list of frames
-//   <frame>.bin         Uint8 voxels, x fastest, then z (north→south), then y (up)
+//   <frame>.bin.gz      gzipped Uint8 voxels, x fastest, then z (north→south), then y (up)
 //                       value 0 = no echo, else dBZ = value / 2 − 32
 //
 // Gridding: every gate is placed with the standard 4/3 effective-earth-radius
@@ -13,6 +13,7 @@
 // then filled vertically from the nearest echoes in the same column.
 import { readdir, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { gzipSync } from 'node:zlib';
 import { resolve } from 'node:path';
 import { parseArgs, PUBLIC_DATA_DIR, RAW_DIR, writeOut } from './lib/cli.mjs';
 
@@ -51,17 +52,19 @@ for (const file of files) {
   const { voxels, gates, tilts, site } = gridVolume(radar);
   const filled = fillColumns(voxels);
   const id = file.replace(/(_V\d+)?(\.gz)?$/, '');
-  await writeOut(resolve(outDir, `${id}.bin`), voxels);
+  // Mostly empty air, so gzip shrinks frames ~10×; the viewer inflates them with DecompressionStream.
+  const compressed = gzipSync(voxels, { level: 9 });
+  await writeOut(resolve(outDir, `${id}.bin.gz`), compressed);
 
   const time = /(\d{8})_(\d{6})/.exec(file);
   frames.push({
     id,
-    file: `${id}.bin`,
+    file: `${id}.bin.gz`,
     timeUtc: `${time[1].slice(0, 4)}-${time[1].slice(4, 6)}-${time[1].slice(6)}T${time[2].slice(0, 2)}:${time[2].slice(2, 4)}:${time[2].slice(4)}Z`,
     tilts,
   });
   console.log(
-    `  ${id}: ${tilts.length} tilts, ${(gates / 1e6).toFixed(1)}M gates, +${filled} filled, ` +
+    `  ${id}: ${(compressed.length / 1e3).toFixed(0)} kB, ${tilts.length} tilts, ${(gates / 1e6).toFixed(1)}M gates, +${filled} filled, ` +
       `site ${site.lat.toFixed(4)},${site.lon.toFixed(4)} — ${(performance.now() - t0).toFixed(0)} ms`,
   );
 }

@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { MapControls } from 'three/examples/jsm/controls/MapControls.js';
 import { EVENT, TERRAIN } from './config';
 import { lonLatToScene } from './geo/projection';
+import { RadarVolume } from './radar/RadarVolume';
+import { drawLegend } from './radar/reflectivity';
 import { RadarSite } from './overlays/RadarSite';
 import { TornadoTracks } from './overlays/TornadoTracks';
 import { TerrainManager } from './terrain/TerrainManager';
@@ -17,7 +19,7 @@ scene.fog = new THREE.Fog(SKY, 250, 900);
 
 const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 3000);
 const focus = lonLatToScene(EVENT.focus);
-camera.position.set(focus.x - 10, 28, focus.z + 48);
+camera.position.set(focus.x + 15, 55, focus.z + 120);
 
 const controls = new MapControls(camera, canvas);
 controls.target.set(focus.x, 0, focus.z);
@@ -42,6 +44,14 @@ scene.add(tracks.group);
 const radar = new RadarSite();
 scene.add(radar.group);
 
+const volume = new RadarVolume();
+scene.add(volume.mesh);
+
+// Terrain-only depth pass; the raymarcher reads it to stop rays at the ground.
+const depthTarget = new THREE.WebGLRenderTarget(1, 1, {
+  depthTexture: new THREE.DepthTexture(1, 1, THREE.UnsignedIntType),
+});
+
 // --- HUD -------------------------------------------------------------------
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const exagInput = $<HTMLInputElement>('exag');
@@ -56,6 +66,7 @@ function setExaggeration(value: number) {
   exagValue.textContent = `${value}×`;
   terrain.setExaggeration(value);
   radar.setExaggeration(value);
+  volume.setTerrainExaggeration(value);
   tracks.drape(value);
 }
 setExaggeration(exaggeration);
@@ -73,6 +84,96 @@ tracks
     if (count === 0) console.info('No tracks.geojson yet — run `npm run data:tracks`.');
   })
   .catch((err) => console.warn('Failed to load tornado tracks', err));
+
+// --- Radar volume controls ---------------------------------------------------
+const timeInput = $<HTMLInputElement>('time');
+const timeLabel = $('time-label');
+const playButton = $<HTMLButtonElement>('play');
+let radarTime = 0;
+let playing = false;
+/** Frames advanced per second of wall-clock time during playback. */
+const PLAYBACK_FPS = 0.8;
+
+const utcFormat = new Intl.DateTimeFormat('en-US', {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+  timeZone: 'UTC',
+});
+const cdtFormat = new Intl.DateTimeFormat('en-US', {
+  hour: 'numeric',
+  minute: '2-digit',
+  timeZone: 'America/Chicago',
+});
+
+function setRadarTime(t: number) {
+  radarTime = t;
+  timeInput.value = String(t);
+  volume.setTime(t);
+  const time = volume.timeAt(t);
+  if (time) timeLabel.textContent = `${utcFormat.format(time)} UTC · ${cdtFormat.format(time)} CDT`;
+}
+
+function setPlaying(value: boolean) {
+  playing = value;
+  playButton.textContent = value ? '❚❚' : '▶';
+  playButton.setAttribute('aria-label', value ? 'Pause' : 'Play');
+}
+
+function bindRange(id: string, initial: number, format: (v: number) => string, apply: (v: number) => void) {
+  const input = $<HTMLInputElement>(id);
+  const label = $(`${id}-value`);
+  const update = () => {
+    const v = Number(input.value);
+    label.textContent = format(v);
+    apply(v);
+  };
+  input.value = String(initial);
+  input.addEventListener('input', update);
+  update();
+}
+
+bindRange('opacity', 1, (v) => `${v.toFixed(2)}×`, (v) => volume.setOpacity(v));
+bindRange('min-dbz', 20, (v) => `${v} dBZ`, (v) => volume.setMinDbz(v));
+bindRange('height', 1.5, (v) => `${v}×`, (v) => volume.setHeightScale(v));
+drawLegend($<HTMLCanvasElement>('legend'));
+
+timeInput.addEventListener('input', () => {
+  setPlaying(false);
+  setRadarTime(Number(timeInput.value));
+});
+playButton.addEventListener('click', () => {
+  if (!playing && radarTime >= volume.frames.length - 1) setRadarTime(0);
+  setPlaying(!playing);
+});
+$<HTMLInputElement>('show-volume').addEventListener('change', (e) => {
+  volume.mesh.visible = (e.target as HTMLInputElement).checked && volume.frames.length > 0;
+});
+
+volume
+  .load(`${import.meta.env.BASE_URL}data/radar/`, (loaded, total) => {
+    timeLabel.textContent = `Loading radar ${loaded}/${total}…`;
+  })
+  .then((frames) => {
+    if (frames.length === 0) {
+      timeLabel.textContent = 'No radar data — run `npm run data`';
+      return;
+    }
+    timeInput.max = String(frames.length - 1);
+    // Open on the scan closest to the Moore touchdown (19:56 UTC).
+    const touchdown = Date.UTC(2013, 4, 20, 19, 56);
+    const nearest = frames.reduce(
+      (best, f, i) =>
+        Math.abs(f.time.getTime() - touchdown) < Math.abs(frames[best].time.getTime() - touchdown) ? i : best,
+      0,
+    );
+    setRadarTime(nearest);
+  })
+  .catch((err) => {
+    console.error('Failed to load radar volume', err);
+    timeLabel.textContent = 'Radar failed to load';
+  });
 
 function renderStats() {
   const s = terrain.stats;
@@ -93,15 +194,36 @@ function resize() {
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   tracks.setResolution(w, h);
+  const buffer = renderer.getDrawingBufferSize(new THREE.Vector2());
+  depthTarget.setSize(buffer.x, buffer.y);
 }
 window.addEventListener('resize', resize);
 resize();
 
 let frame = 0;
+const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
   controls.update();
   terrain.update(camera);
   frame++;
+
+  if (playing) {
+    const next = radarTime + dt * PLAYBACK_FPS;
+    if (next >= volume.frames.length - 1) {
+      setRadarTime(volume.frames.length - 1);
+      setPlaying(false);
+    } else {
+      setRadarTime(next);
+    }
+  }
+
+  if (volume.mesh.visible) {
+    renderer.setRenderTarget(depthTarget);
+    renderer.render(terrain.group, camera);
+    renderer.setRenderTarget(null);
+    volume.updateView(camera, depthTarget.depthTexture!, depthTarget.width, depthTarget.height);
+  }
   // Tiles stream in continuously; re-drape tracks and refresh the HUD a few times a second.
   if (frame % 20 === 0) {
     tracks.drape(exaggeration);

@@ -22,15 +22,20 @@ src/
   terrain/TerrainManager.ts quadtree LOD streaming, distance-prioritised loads, LRU eviction
   overlays/TornadoTracks.ts SPC paths draped on whatever terrain LOD is loaded
   overlays/RadarSite.ts     KTLX marker and range rings
+  radar/RadarVolume.ts      loads baked frames into 3D textures; raymarched box
+  radar/volume.frag.glsl    raymarcher: box intersect, terrain-depth clip, transfer function
+  radar/reflectivity.ts     NWS colour table, opacity curve, legend
 scripts/
   fetch-spc-tracks.mjs      SPC 1950–2024 tornado CSV → public/data/tracks.geojson
   fetch-nexrad.mjs          Level II volumes from s3://unidata-nexrad-level2 → data/raw/
-  bake-radar.mjs            polar gates → 256×256×40 Cartesian uint8 dBZ grid (4/3-earth beam model)
+  bake-radar.mjs            polar gates → 256×256×40 gzipped uint8 dBZ grid (4/3-earth beam model)
 ```
 
 **Coordinates.** Scene units are kilometres: +x east, −z north, +y up. The origin is the KTLX radar, so baked radar grids line up with the scene without reprojection.
 
 **Terrain streaming.** Root tiles at zoom 7 cover the state, and tiles split down to zoom 13 near the camera. A tile is replaced by its children only once all four have loaded, so the surface never has holes. Skirts hide cracks where neighbouring tiles are at different detail levels. Vertical exaggeration is applied as a group scale, so it doesn't require rebuilding geometry.
+
+**Radar rendering.** Each frame is a 256×256×40 R8 3D texture. The box's back faces launch one ray per pixel, intersected with the volume bounds and clipped against a terrain-only depth pre-pass (the logarithmic depth buffer is decoded in the shader). Samples are composited front to back through a 256-entry colour/opacity lookup with step-size opacity correction, and the two neighbouring scans are blended for smooth playback.
 
 **Radar baking.** Each gate is placed using the standard 4/3 effective-earth-radius beam height and ground-range model, then max-binned into a voxel. Short vertical gaps between tilts are linearly filled. Output encoding: `0` = no echo, otherwise `dBZ = value / 2 − 32`.
 

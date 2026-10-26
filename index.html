@@ -16,7 +16,31 @@
         <input id="exag" type="range" min="1" max="20" step="0.5" />
       </label>
       <label class="check"><input id="show-tracks" type="checkbox" checked /> Tornado tracks</label>
-      <label class="check"><input id="show-radar" type="checkbox" checked /> Radar coverage</label>
+      <label class="check"><input id="show-radar" type="checkbox" checked /> Radar range rings</label>
+
+      <section id="radar-panel">
+        <h2>KTLX reflectivity</h2>
+        <div class="time-row">
+          <button id="play" type="button" aria-label="Play">▶</button>
+          <output id="time-label">Loading radar…</output>
+        </div>
+        <input id="time" type="range" min="0" max="0" step="0.01" value="0" aria-label="Radar time" />
+        <label class="check"><input id="show-volume" type="checkbox" checked /> Volume</label>
+        <label>
+          Opacity <span id="opacity-value"></span>
+          <input id="opacity" type="range" min="0.1" max="3" step="0.05" />
+        </label>
+        <label>
+          Minimum <span id="min-dbz-value"></span>
+          <input id="min-dbz" type="range" min="5" max="60" step="1" />
+        </label>
+        <label>
+          Storm height <span id="height-value"></span>
+          <input id="height" type="range" min="1" max="5" step="0.25" />
+        </label>
+        <canvas id="legend" width="248" height="10"></canvas>
+        <div class="legend-scale"><span>5</span><span>40</span><span>75 dBZ</span></div>
+      </section>
       <dl id="stats"></dl>
       <p class="credits">
         Terrain: AWS Terrain Tiles · Tracks: NOAA SPC · Radar: NOAA NEXRAD via Unidata
