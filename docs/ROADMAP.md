@@ -11,6 +11,7 @@
 - [x] Raymarched volume: NWS colour table, opacity-corrected compositing, early ray termination
 - [x] Rays clipped by a terrain depth pre-pass (log depth decoded in the shader)
 - [x] Time slider + playback; neighbouring scans blended in the shader
+- [x] Voxel → polar gridding with interpolation between tilts (removes ring/stripe gaps at long range)
 - [ ] Gradient-based lighting / self-shadowing for more readable structure
 - [ ] Isosurfaces at 35 / 50 / 60 dBZ via marching cubes (WebGPU compute) as a second view
 - [ ] Advection-corrected interpolation between frames (crossfading ghosts fast-moving cores)
@@ -28,6 +29,5 @@
 - [ ] Data-quality panel: tilt count, gaps, truncated volumes per frame
 
 ## Known limitations
-- Far from the radar (>~100 km) the gaps between tilts exceed the fill limit, so distant storms show vertical striping.
 - Cone of silence: above the highest tilt (19.5°) close to the radar there's no data, so storm tops near KTLX are clipped.
 - The radar grid uses a flat east/north frame around KTLX. Over ±120 km the difference from the scene's Mercator frame is under 1%.

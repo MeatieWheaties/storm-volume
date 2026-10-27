@@ -28,7 +28,7 @@ src/
 scripts/
   fetch-spc-tracks.mjs      SPC 1950–2024 tornado CSV → public/data/tracks.geojson
   fetch-nexrad.mjs          Level II volumes from s3://unidata-nexrad-level2 → data/raw/
-  bake-radar.mjs            polar gates → 256×256×40 gzipped uint8 dBZ grid (4/3-earth beam model)
+  bake-radar.mjs            voxel → polar resampling into a 256×256×40 gzipped uint8 dBZ grid
 ```
 
 **Coordinates.** Scene units are kilometres: +x east, −z north, +y up. The origin is the KTLX radar, so baked radar grids line up with the scene without reprojection.
@@ -37,7 +37,7 @@ scripts/
 
 **Radar rendering.** Each frame is a 256×256×40 R8 3D texture. The box's back faces launch one ray per pixel, intersected with the volume bounds and clipped against a terrain-only depth pre-pass (the logarithmic depth buffer is decoded in the shader). Samples are composited front to back through a 256-entry colour/opacity lookup with step-size opacity correction, and the two neighbouring scans are blended for smooth playback.
 
-**Radar baking.** Each gate is placed using the standard 4/3 effective-earth-radius beam height and ground-range model, then max-binned into a voxel. Short vertical gaps between tilts are linearly filled. Output encoding: `0` = no echo, otherwise `dBZ = value / 2 − 32`.
+**Radar baking.** Gridding runs voxel → polar. Each voxel centre is converted to azimuth, slant range and elevation angle with the inverse 4/3 effective-earth-radius beam model. It is sampled on the tilts directly below and above it (nearest radial, linear in range) and interpolated linearly in elevation angle. At storm tops and edges, where only one tilt has echo, the echo extends half a beamwidth and stops. Duplicate cuts (split-cut pairs, SAILS repeats) are merged, keeping the longest-range scan. Output encoding: `0` = no echo, otherwise `dBZ = value / 2 − 32`.
 
 ## Data sources
 
