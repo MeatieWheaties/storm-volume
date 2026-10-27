@@ -2,6 +2,8 @@
 
 A real-time 3D viewer for Oklahoma severe weather: streamed terrain, NOAA SPC tornado damage paths, and NEXRAD Level II radar volumes, starting with the **May 20, 2013 Moore EF5**.
 
+**Live demo:** https://meatiewheaties.github.io/storm-volume/
+
 Built with TypeScript, three.js and Vite. No API keys required; all data comes from public NOAA and AWS Open Data archives.
 
 ## Quick start
@@ -43,6 +45,10 @@ scripts/
 **Tornado timing.** SPC records only a start time. NCEI Storm Events splits each tornado into county segments with begin and end times and points. Each SPC track is matched to the segment starting within 2 minutes and 2 km of it, then segments are chained end-to-begin across county lines. That gives every path vertex a timestamp (all 56 tracks for May 19–31, 2013 match). As radar time moves, the path covered so far is drawn over the radar volume, a funnel marks the current position, and tornadoes from other days of the outbreak stay faint.
 
 **Radar baking.** Gridding runs voxel → polar. Each voxel centre is converted to azimuth, slant range and elevation angle with the inverse 4/3 effective-earth-radius beam model. It is sampled on the tilts directly below and above it, averaging (in linear Z) the gates and radials that fall within the voxel's footprint, and interpolated linearly in elevation angle. At storm tops and edges, where only one tilt has echo, the echo extends half a beamwidth and stops. Duplicate cuts (split-cut pairs, SAILS repeats) are merged, keeping the longest-range scan. Output encoding: `0` = no echo, otherwise `dBZ = value / 2 − 32`.
+
+## Deployment
+
+Pushing to `main` builds the site and publishes it to GitHub Pages ([.github/workflows/deploy.yml](.github/workflows/deploy.yml)). The baked data in `public/data/` is committed, so CI doesn't re-run the NOAA pipeline. To change the event, run `npm run data` locally and commit the results.
 
 ## Data sources
 

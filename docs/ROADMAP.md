@@ -26,7 +26,7 @@
 ## Polish
 - [ ] Hilbert-curve ordering of tile requests for cache locality
 - [ ] Event picker: Moore 2013-05-20, El Reno 2013-05-31, Shawnee 2013-05-19
-- [ ] Deploy to GitHub Pages
+- [x] Deploy to GitHub Pages
 - [ ] Data-quality panel: tilt count, gaps, truncated volumes per frame
 
 ## Known limitations
