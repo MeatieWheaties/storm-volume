@@ -12,7 +12,8 @@
 - [x] Rays clipped by a terrain depth pre-pass (log depth decoded in the shader)
 - [x] Time slider + playback; neighbouring scans blended in the shader
 - [x] Voxel → polar gridding with interpolation between tilts (removes ring/stripe gaps at long range)
-- [ ] Gradient-based lighting / self-shadowing for more readable structure
+- [x] Lighting: Sobel gradient volumes baked on the GPU per scan, Lambert + rim shading, 6-step sun shadow rays
+- [x] Bake averages radar samples over each voxel's footprint in linear Z (removes speckle the shading exposed)
 - [ ] Isosurfaces at 35 / 50 / 60 dBZ via marching cubes (WebGPU compute) as a second view
 - [ ] Advection-corrected interpolation between frames (crossfading ghosts fast-moving cores)
 - [x] Tracks timed from NCEI Storm Events county segments; covered path, funnel marker and on-the-ground list follow radar time
@@ -29,5 +30,6 @@
 - [ ] Data-quality panel: tilt count, gaps, truncated volumes per frame
 
 ## Known limitations
-- Cone of silence: above the highest tilt (19.5°) close to the radar there's no data, so storm tops near KTLX are clipped.
+- Cone of silence: above the highest tilt (19.5°) close to the radar there's no data, so storm tops near KTLX are clipped. On the 0.5 km vertical grid the cut shows as a staircase, which lighting makes more visible.
+- Frame-rate numbers haven't been measured on a visible, full-size window yet; the HUD shows live fps.
 - The radar grid uses a flat east/north frame around KTLX. Over ±120 km the difference from the scene's Mercator frame is under 1%.

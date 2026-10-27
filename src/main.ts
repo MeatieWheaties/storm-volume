@@ -160,6 +160,11 @@ function bindRange(id: string, initial: number, format: (v: number) => string, a
 bindRange('opacity', 1, (v) => `${v.toFixed(2)}×`, (v) => volume.setOpacity(v));
 bindRange('min-dbz', 20, (v) => `${v} dBZ`, (v) => volume.setMinDbz(v));
 bindRange('height', 1.5, (v) => `${v}×`, (v) => volume.setHeightScale(v));
+bindRange('shadow', 1, (v) => `${v.toFixed(1)}×`, (v) => volume.setShadowStrength(v));
+volume.setSunDirection(sun.position);
+$<HTMLInputElement>('lighting').addEventListener('change', (e) => {
+  volume.setLighting((e.target as HTMLInputElement).checked);
+});
 drawLegend($<HTMLCanvasElement>('legend'));
 
 timeInput.addEventListener('input', () => {
@@ -205,6 +210,7 @@ function renderStats() {
     ['Tiles cached', String(s.cached)],
     ['Loading / queued', `${s.loading} / ${s.queued}`],
     ['Camera altitude', `${camera.position.y.toFixed(1)} km`],
+    ['Frame rate', `${fps.toFixed(0)} fps`],
   ];
   stats.innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
 }
@@ -224,6 +230,8 @@ window.addEventListener('resize', resize);
 resize();
 
 let frame = 0;
+let fps = 0;
+let statsTime = performance.now();
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
@@ -246,10 +254,13 @@ renderer.setAnimationLoop(() => {
     renderer.setRenderTarget(depthTarget);
     renderer.render(terrain.group, camera);
     renderer.setRenderTarget(null);
-    volume.updateView(camera, depthTarget.depthTexture!, depthTarget.width, depthTarget.height);
+    volume.updateView(renderer, camera, depthTarget.depthTexture!, depthTarget.width, depthTarget.height);
   }
   // Tiles stream in continuously; re-drape tracks and refresh the HUD a few times a second.
   if (frame % 20 === 0) {
+    const now = performance.now();
+    fps = (20 * 1000) / (now - statsTime);
+    statsTime = now;
     tracks.drape(exaggeration);
     renderStats();
   }

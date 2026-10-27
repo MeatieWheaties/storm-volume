@@ -24,6 +24,7 @@ src/
   overlays/RadarSite.ts     KTLX marker and range rings
   radar/RadarVolume.ts      loads baked frames into 3D textures; raymarched box
   radar/volume.frag.glsl    raymarcher: box intersect, terrain-depth clip, transfer function
+  radar/GradientBaker.ts    GPU Sobel pass → 3D gradient texture per displayed scan (for lighting)
   radar/reflectivity.ts     NWS colour table, opacity curve, legend
 scripts/
   fetch-spc-tracks.mjs      SPC tracks + NCEI Storm Events timing → public/data/tracks.geojson
@@ -37,9 +38,11 @@ scripts/
 
 **Radar rendering.** Each frame is a 256×256×40 R8 3D texture. The box's back faces launch one ray per pixel, intersected with the volume bounds and clipped against a terrain-only depth pre-pass (the logarithmic depth buffer is decoded in the shader). Samples are composited front to back through a 256-entry colour/opacity lookup with step-size opacity correction, and the two neighbouring scans are blended for smooth playback.
 
+**Volume lighting.** Normals come from a 3×3×3 Sobel gradient volume that a GPU pass bakes slice by slice into a 3D render target, only when the displayed scan pair changes. Sampling a stored gradient with trilinear filtering stays continuous across voxels; differencing the trilinear field in the raymarcher doesn't, and shows a hatch pattern. Each visible sample gets Lambert shading (blended towards flat light inside smooth cores, where the gradient is noise), a faint rim term, and sun transmittance from a 6-step shadow ray with geometrically growing steps, using the same optical depth as the view ray.
+
 **Tornado timing.** SPC records only a start time. NCEI Storm Events splits each tornado into county segments with begin and end times and points. Each SPC track is matched to the segment starting within 2 minutes and 2 km of it, then segments are chained end-to-begin across county lines. That gives every path vertex a timestamp (all 56 tracks for May 19–31, 2013 match). As radar time moves, the path covered so far is drawn over the radar volume, a funnel marks the current position, and tornadoes from other days of the outbreak stay faint.
 
-**Radar baking.** Gridding runs voxel → polar. Each voxel centre is converted to azimuth, slant range and elevation angle with the inverse 4/3 effective-earth-radius beam model. It is sampled on the tilts directly below and above it (nearest radial, linear in range) and interpolated linearly in elevation angle. At storm tops and edges, where only one tilt has echo, the echo extends half a beamwidth and stops. Duplicate cuts (split-cut pairs, SAILS repeats) are merged, keeping the longest-range scan. Output encoding: `0` = no echo, otherwise `dBZ = value / 2 − 32`.
+**Radar baking.** Gridding runs voxel → polar. Each voxel centre is converted to azimuth, slant range and elevation angle with the inverse 4/3 effective-earth-radius beam model. It is sampled on the tilts directly below and above it, averaging (in linear Z) the gates and radials that fall within the voxel's footprint, and interpolated linearly in elevation angle. At storm tops and edges, where only one tilt has echo, the echo extends half a beamwidth and stops. Duplicate cuts (split-cut pairs, SAILS repeats) are merged, keeping the longest-range scan. Output encoding: `0` = no echo, otherwise `dBZ = value / 2 − 32`.
 
 ## Data sources
 

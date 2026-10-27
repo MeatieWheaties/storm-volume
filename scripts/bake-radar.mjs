@@ -39,6 +39,10 @@ const HALF_BEAM_DEG = 0.5;
 /** Tilts closer than this are the same cut (split-cut surveillance/Doppler pairs, SAILS repeats). */
 const SAME_TILT_DEG = 0.15;
 const AZ_BINS = 720;
+/** Horizontal voxel size; radar samples are averaged over this footprint. */
+const CELL_KM = (2 * GRID.halfWidthKm) / GRID.nx;
+/** Caps the azimuth averaging right next to the radar, where one voxel spans many degrees. */
+const MAX_AZ_FOOTPRINT_DEG = 6;
 const EFFECTIVE_EARTH_RADIUS_KM = (4 / 3) * 6371;
 const DEG = Math.PI / 180;
 
@@ -123,7 +127,7 @@ function readTilts(radar) {
     const radials = records.map((r) => ({
       firstGate: r.reflect.first_gate,
       gateSize: r.reflect.gate_size,
-      data: Float32Array.from(r.reflect.moment_data, (d) => (d === null || d < MIN_DBZ ? NaN : d)),
+      data: smoothAlongRange(r.reflect.moment_data, Math.round(CELL_KM / r.reflect.gate_size)),
     }));
     const tilt = {
       elevationDeg,
@@ -160,11 +164,42 @@ function buildAzimuthIndex(azimuths) {
   return index;
 }
 
-/** Reflectivity (dBZ) on a tilt at azimuth/slant range, linear in range; NaN when no echo. */
+/**
+ * Reflectivity (dBZ) on a tilt at azimuth/slant range; NaN when no echo.
+ * Averages (in linear Z) every radial whose beam falls inside the voxel's
+ * azimuthal footprint, which is several radials near the radar and one far
+ * out. Single-gate sampling there turns natural reflectivity speckle into
+ * voxel-scale noise that shading exaggerates into a dot pattern.
+ */
 function sampleTilt(tilt, azDeg, rangeKm) {
-  const radialIndex = tilt.azIndex[Math.floor(azDeg / (360 / AZ_BINS)) % AZ_BINS];
-  if (radialIndex < 0) return NaN;
-  const radial = tilt.radials[radialIndex];
+  const binWidth = 360 / AZ_BINS;
+  const footprintDeg = Math.min((CELL_KM / Math.max(rangeKm, 1)) / DEG, MAX_AZ_FOOTPRINT_DEG);
+  const reach = Math.floor(footprintDeg / 2 / binWidth);
+  const centre = Math.floor(azDeg / binWidth);
+
+  let sumZ = 0;
+  let echoes = 0;
+  let samples = 0;
+  let lastRadial = -1;
+  for (let k = -reach; k <= reach; k++) {
+    const radialIndex = tilt.azIndex[(((centre + k) % AZ_BINS) + AZ_BINS) % AZ_BINS];
+    // 1° radials span two bins; count each radial once.
+    if (radialIndex < 0 || radialIndex === lastRadial) continue;
+    lastRadial = radialIndex;
+    samples++;
+    const dbz = sampleRadial(tilt.radials[radialIndex], rangeKm);
+    if (!Number.isNaN(dbz)) {
+      sumZ += 10 ** (dbz / 10);
+      echoes++;
+    }
+  }
+  // Keep echo edges where they are: a voxel needs echo in most of its footprint.
+  if (echoes === 0 || echoes * 2 < samples) return NaN;
+  return 10 * Math.log10(sumZ / echoes);
+}
+
+/** Linear interpolation along range on a (pre-smoothed) radial. */
+function sampleRadial(radial, rangeKm) {
   const g = (rangeKm - radial.firstGate) / radial.gateSize;
   const i = Math.floor(g);
   if (i < 0 || i >= radial.data.length) return NaN;
@@ -173,6 +208,32 @@ function sampleTilt(tilt, azDeg, rangeKm) {
   if (Number.isNaN(b)) return a;
   if (Number.isNaN(a)) return b;
   return a + (b - a) * (g - i);
+}
+
+/**
+ * Box-filters a radial over `window` gates (≈ one voxel) in linear Z, so each
+ * range sample represents the voxel's radial extent rather than one 250 m gate.
+ * Gates with echo in under half the window become NaN, preserving edges.
+ */
+function smoothAlongRange(moments, window) {
+  const n = moments.length;
+  const z = new Float64Array(n + 1);
+  const count = new Int32Array(n + 1);
+  for (let i = 0; i < n; i++) {
+    const d = moments[i];
+    const has = d !== null && d >= MIN_DBZ;
+    z[i + 1] = z[i] + (has ? 10 ** (d / 10) : 0);
+    count[i + 1] = count[i] + (has ? 1 : 0);
+  }
+  const half = Math.max(0, Math.floor(window / 2));
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const lo = Math.max(0, i - half);
+    const hi = Math.min(n, i + half + 1);
+    const c = count[hi] - count[lo];
+    out[i] = c * 2 < hi - lo ? NaN : 10 * Math.log10((z[hi] - z[lo]) / c);
+  }
+  return out;
 }
 
 function gridVolume(tilts, site) {

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RADAR_SITE } from '../config';
+import { GRADIENT_SCALE, GradientBaker } from './GradientBaker';
 import { createTransferTexture, dbzToValue } from './reflectivity';
 import fragmentShader from './volume.frag.glsl?raw';
 import vertexShader from './volume.vert.glsl?raw';
@@ -37,6 +38,14 @@ export class RadarVolume {
   private readonly box = new THREE.Box3();
   private heightScale = 2;
   private terrainExaggeration = 1;
+  private readonly gradientBaker = new GradientBaker();
+  /** Two gradient volumes, one per displayed scan, re-baked only when the scan pair changes. */
+  private readonly gradientSlots: Array<{ frame: number; target: THREE.WebGL3DRenderTarget | null }> = [
+    { frame: -1, target: null },
+    { frame: -1, target: null },
+  ];
+  private frameA = 0;
+  private frameB = 0;
 
   constructor() {
     const material = new THREE.ShaderMaterial({
@@ -63,6 +72,15 @@ export class RadarVolume {
         uMinValue: { value: dbzToValue(15) / 255 },
         uMinStep: { value: 0.25 },
         uMaxSteps: { value: MAX_STEPS },
+        uVoxelSize: { value: new THREE.Vector3(1, 1, 1) },
+        uGradA: { value: null },
+        uGradB: { value: null },
+        uGradScale: { value: GRADIENT_SCALE },
+        uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+        uSunColor: { value: new THREE.Color('#fff1dc').multiplyScalar(0.95) },
+        uAmbient: { value: new THREE.Color('#9fb4cf').multiplyScalar(0.38) },
+        uLighting: { value: 1 },
+        uShadowStrength: { value: 1 },
       },
     });
     this.mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
@@ -113,6 +131,8 @@ export class RadarVolume {
     this.uniforms.uVolA.value = this.frames[i].texture;
     this.uniforms.uVolB.value = this.frames[j].texture;
     this.uniforms.uMix.value = t - i;
+    this.frameA = i;
+    this.frameB = j;
   }
 
   /** Interpolated wall-clock time for a fractional frame index. */
@@ -139,18 +159,61 @@ export class RadarVolume {
     this.layout();
   }
 
+  /** Toggles gradient shading + sun shadow rays (off = flat colour with a height cue, cheaper). */
+  setLighting(enabled: boolean) {
+    this.uniforms.uLighting.value = enabled ? 1 : 0;
+  }
+
+  /** World-space direction towards the sun; shared with the scene's directional light. */
+  setSunDirection(dir: THREE.Vector3) {
+    this.uniforms.uSunDir.value.copy(dir).normalize();
+  }
+
+  /** Scales optical depth along shadow rays: 0 = no shadows, 1 = physically consistent with the view opacity. */
+  setShadowStrength(value: number) {
+    this.uniforms.uShadowStrength.value = value;
+  }
+
   setTerrainExaggeration(value: number) {
     this.terrainExaggeration = value;
     this.layout();
   }
 
-  /** Per-frame camera/target state for the raymarcher. */
-  updateView(camera: THREE.PerspectiveCamera, depth: THREE.DepthTexture, width: number, height: number) {
+  /** Per-frame camera/target state for the raymarcher; also bakes gradients for newly shown scans. */
+  updateView(
+    renderer: THREE.WebGLRenderer,
+    camera: THREE.PerspectiveCamera,
+    depth: THREE.DepthTexture,
+    width: number,
+    height: number,
+  ) {
     const u = this.uniforms;
+    if (this.frames.length > 0 && u.uLighting.value > 0.5) {
+      u.uGradA.value = this.gradientFor(renderer, this.frameA, this.frameB);
+      u.uGradB.value = this.gradientFor(renderer, this.frameB, this.frameA);
+    }
     u.uDepth.value = depth;
     u.uResolution.value.set(width, height);
     u.uLogDepthFar.value = Math.log2(camera.far + 1);
     camera.getWorldDirection(u.uCamForward.value);
+  }
+
+  /**
+   * Gradient texture for `frame`, reusing a slot that already holds it. During
+   * playback the next pair shares one scan with the current pair, so each step
+   * bakes only one new volume (40 slice draws).
+   */
+  private gradientFor(renderer: THREE.WebGLRenderer, frame: number, keep: number): THREE.Texture {
+    let slot = this.gradientSlots.find((s) => s.frame === frame);
+    if (!slot) {
+      // Evict whichever slot isn't holding the partner frame.
+      slot = this.gradientSlots.find((s) => s.frame !== keep) ?? this.gradientSlots[0];
+      const source = this.frames[frame].texture;
+      slot.target ??= this.gradientBaker.createTarget(source);
+      this.gradientBaker.bake(renderer, source, slot.target);
+      slot.frame = frame;
+    }
+    return slot.target!.texture;
   }
 
   private layout() {
@@ -164,6 +227,8 @@ export class RadarVolume {
     this.boxMax.copy(this.box.max);
     this.box.getCenter(this.mesh.position);
     this.box.getSize(this.mesh.scale);
+    const { dims } = this.index;
+    this.uniforms.uVoxelSize.value.set(this.mesh.scale.x / dims.x, this.mesh.scale.y / dims.y, this.mesh.scale.z / dims.z);
   }
 }
 
