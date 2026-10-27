@@ -25,6 +25,7 @@
           <output id="time-label">Loading radar…</output>
         </div>
         <input id="time" type="range" min="0" max="0" step="0.01" value="0" aria-label="Radar time" />
+        <ul id="active-tornadoes" aria-live="polite"></ul>
         <label class="check"><input id="show-volume" type="checkbox" checked /> Volume</label>
         <label>
           Opacity <span id="opacity-value"></span>
@@ -43,7 +44,7 @@
       </section>
       <dl id="stats"></dl>
       <p class="credits">
-        Terrain: AWS Terrain Tiles · Tracks: NOAA SPC · Radar: NOAA NEXRAD via Unidata
+        Terrain: AWS Terrain Tiles · Tracks: NOAA SPC + NCEI · Radar: NOAA NEXRAD via Unidata
       </p>
     </aside>
     <script type="module" src="/src/main.ts"></script>

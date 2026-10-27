@@ -5,7 +5,7 @@ import { lonLatToScene } from './geo/projection';
 import { RadarVolume } from './radar/RadarVolume';
 import { drawLegend } from './radar/reflectivity';
 import { RadarSite } from './overlays/RadarSite';
-import { TornadoTracks } from './overlays/TornadoTracks';
+import { TornadoTracks, type ActiveTornado } from './overlays/TornadoTracks';
 import { TerrainManager } from './terrain/TerrainManager';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#scene')!;
@@ -82,6 +82,8 @@ tracks
   .load(`${import.meta.env.BASE_URL}data/tracks.geojson`)
   .then((count) => {
     if (count === 0) console.info('No tracks.geojson yet — run `npm run data:tracks`.');
+    // Radar may have loaded first; sync the tracks to the current time.
+    if (volume.frames.length > 0) setRadarTime(radarTime);
   })
   .catch((err) => console.warn('Failed to load tornado tracks', err));
 
@@ -113,6 +115,27 @@ function setRadarTime(t: number) {
   volume.setTime(t);
   const time = volume.timeAt(t);
   if (time) timeLabel.textContent = `${utcFormat.format(time)} UTC · ${cdtFormat.format(time)} CDT`;
+  renderActive(tracks.setTime(time?.getTime() ?? null));
+}
+
+const activeList = $('active-tornadoes');
+let activeKey = '';
+function renderActive(active: ActiveTornado[]) {
+  // Rebuild only when the set of tornadoes changes; just move the progress bars otherwise.
+  const key = active.map((a) => a.props.id).join(',');
+  if (key !== activeKey) {
+    activeKey = key;
+    activeList.innerHTML = active
+      .map(({ props: p }) => {
+        const span = `${utcFormat.format(p.timesUtc[0]).slice(0, 5)}–${utcFormat.format(p.timesUtc.at(-1)!).slice(0, 5)} UTC`;
+        return `<li data-id="${p.id}"><b class="ef ef${Math.max(p.mag, 0)}">EF${p.mag}</b> ${p.name ?? 'Tornado'}<small>${span}</small><i></i></li>`;
+      })
+      .join('');
+  }
+  for (const a of active) {
+    const bar = activeList.querySelector<HTMLElement>(`li[data-id="${a.props.id}"] i`);
+    if (bar) bar.style.width = `${(a.progress * 100).toFixed(1)}%`;
+  }
 }
 
 function setPlaying(value: boolean) {
@@ -204,6 +227,7 @@ let frame = 0;
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
+  tracks.animate(clock.elapsedTime);
   controls.update();
   terrain.update(camera);
   frame++;

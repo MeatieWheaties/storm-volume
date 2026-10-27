@@ -104,6 +104,49 @@ html, body {
   accent-color: var(--accent);
 }
 
+#active-tornadoes {
+  list-style: none;
+  margin: 4px 0 6px;
+  padding: 0;
+}
+
+#active-tornadoes li {
+  position: relative;
+  margin-top: 6px;
+  padding: 5px 8px 7px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+#active-tornadoes small {
+  display: block;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Lifetime progress bar along the bottom edge. */
+#active-tornadoes i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
+}
+
+.ef {
+  padding: 0 4px;
+  border-radius: 3px;
+  color: #111;
+  font-size: 11px;
+}
+.ef0 { background: #9ad0ff; }
+.ef1 { background: #6fd36f; }
+.ef2 { background: #f2e24b; }
+.ef3 { background: #f59b3a; }
+.ef4 { background: #e8452c; color: #fff; }
+.ef5 { background: #c42bd6; color: #fff; }
+
 #legend {
   display: block;
   width: 100%;

@@ -15,7 +15,7 @@
 - [ ] Gradient-based lighting / self-shadowing for more readable structure
 - [ ] Isosurfaces at 35 / 50 / 60 dBZ via marching cubes (WebGPU compute) as a second view
 - [ ] Advection-corrected interpolation between frames (crossfading ghosts fast-moving cores)
-- [ ] Highlight the active tornado segment on its track for the current frame time
+- [x] Tracks timed from NCEI Storm Events county segments; covered path, funnel marker and on-the-ground list follow radar time
 
 ## Atmosphere
 - [ ] HRRR (2014+) or ERA5 data at different pressure levels → wind field texture
